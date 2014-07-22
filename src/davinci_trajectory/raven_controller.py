@@ -462,7 +462,7 @@ class RavenController():
     ###############################
 
     def setGripperPositionDaVinci(self, angle):
-        if (angle < 1.2) & (angle >= -0.2):
+        if (angle < 1.2) & (angle >= -0.3):
             self.pubGripperAngle.publish(angle)
         else:
             print "Unreachable PSM angle"

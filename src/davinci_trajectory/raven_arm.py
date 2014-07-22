@@ -828,3 +828,4 @@ if __name__ == '__main__':
     # testGripperLinearInterpolator()
     # testGripperPoseExecuteEndPose()
     # testGripperSetOpenAngle()
+    print 'hello'
