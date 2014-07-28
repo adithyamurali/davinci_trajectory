@@ -178,7 +178,7 @@ class RavenPlanner:
     raveJointNamesPrefixes = ["shoulder",
                               "elbow",
                               "insertion",
-                              "tool_roll",
+                               "tool_roll",
                               "wrist_joint",
                               "grasper_yaw"]
     
@@ -201,10 +201,10 @@ class RavenPlanner:
             ravenFile = os.path.join(roslib.packages.get_pkg_subdir('RavenDebridement','models'),'raven_with_workspace.zae')
         else:
             ravenFile = os.path.join(roslib.packages.get_pkg_subdir('RavenDebridement','models'),'myRaven.xml')
-        #ravenFile = '/home/gkahn/ros_workspace/RavenDebridement/models/myRaven.xml'
+
         self.env.Load(ravenFile)
         rospy.loginfo('After loading model')
-        
+
         self.robot = self.env.GetRobots()[0]
         
         self.invKinArm = dict()
@@ -218,7 +218,7 @@ class RavenPlanner:
         self.rosJointTypesToRave = dict()
         self.raveGrasperJointNames = dict()
         self.raveGrasperJointTypes = dict()
-        
+
         self.trajRequest = dict()
         
         self.trajEndJoints = dict()
@@ -523,7 +523,7 @@ class RavenPlanner:
                 rosJointType = self.raveJointTypesToRos[armName][raveJointType]
                 endJointPositions.append(endJoints[rosJointType])
                 startJointPositions.append(startJoints[rosJointType])
-            
+
             startPoses.append(self.trajStartPose[armName])
             endPoses.append(self.trajEndPose[armName])
             toolFrames.append(self.toolFrame[armName])

@@ -26,7 +26,7 @@ class RavenArm:
     Class for controlling the end effectors of the Raven
     """
 
-    def __init__ (self, armName, closedGraspValue=0.,defaultPoseSpeed=.01):
+    def __init__ (self, armName, simulationDaVinci = False, closedGraspValue=0.,defaultPoseSpeed=.01):
         self.armName = armName
 
         if armName == raven_constants.Arm.Left:
@@ -36,8 +36,10 @@ class RavenArm:
             
         # self.commandFrame = raven_constants.Frames.Link0
         self.commandFrame = "two_remote_center_link"
-        
-        self.ravenController = RavenController(self.armName, closedGraspValue=closedGraspValue, defaultPoseSpeed=defaultPoseSpeed)
+
+        self.simulation = simulationDaVinci
+
+        self.ravenController = RavenController(self.armName, self.simulation, closedGraspValue=closedGraspValue, defaultPoseSpeed=defaultPoseSpeed)
 
  
     #############################
@@ -359,6 +361,7 @@ class RavenArm:
         weight = float(1)/n_steps
         trajectory = []
 
+        IPython.embed()
         startPose = self.ravenController.currentPose
 
         for i in range(n_steps):
@@ -708,7 +711,7 @@ def testExecuteJointTrajectoryBSP(arm=raven_constants.Arm.Right):
 
 def testGripperMove(arm=raven_constants.Arm.Left):
     rospy.init_node('raven_commander',anonymous=True)
-    ravenArm = RavenArm(arm)
+    ravenArm = RavenArm(arm, True)
     rospy.sleep(1)
 
     ravenArm.start()
@@ -814,6 +817,36 @@ def testGripperSetOpenAngle(arm=raven_constants.Arm.Right):
     rospy.loginfo('Press enter to exit')
     raw_input()
 
+def testSimulation(arm=raven_constants.Arm.Left):
+    rospy.init_node('raven_commander',anonymous=True)
+    ravenArm = RavenArm(arm, True)
+    rospy.sleep(1)
+
+    ravenArm.start()
+
+    rospy.loginfo('Press enter to start')
+    raw_input()
+
+    startPose = ravenArm.ravenController.currentPose
+    delta = tfx.pose([0.01, 0.01, 0.01])
+    delta.frame = ""
+    endPose = raven_util.endPose(startPose, delta)    
+
+    print "Start Pose:"
+    print startPose
+    print "End Pose:"
+    print endPose
+    ravenArm.ravenController.goToPose(endPose)
+
+    rospy.loginfo('Press enter to stop')
+    raw_input()
+
+    ravenArm.ravenController.stop()
+
+    rospy.loginfo('Press enter to exit')
+    raw_input()
+
+
 if __name__ == '__main__':
     #testOpenCloseGripper(close=True)
     #testMoveToHome()
@@ -824,8 +857,9 @@ if __name__ == '__main__':
     #testExecuteJointTrajectory()
     #testOpenraveJoints()
     #testExecuteJointTrajectoryBSP()
-    # testGripperMove()
+    testGripperMove()
     # testGripperLinearInterpolator()
     # testGripperPoseExecuteEndPose()
     # testGripperSetOpenAngle()
+    # testSimulation()
     print 'hello'

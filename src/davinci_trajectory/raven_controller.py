@@ -50,7 +50,7 @@ class Stage(object):
         return cb
 
 class RavenController():
-    def __init__(self, arm, closedGraspValue=0.,defaultPoseSpeed=.01):
+    def __init__(self, arm, simulationDaVinci = False, closedGraspValue=0.,defaultPoseSpeed=.01):
         self.arm = arm
 
         self.stopRunning = threading.Event()
@@ -59,6 +59,8 @@ class RavenController():
         
         self.stages = []
         self.stagesQueue = mp.Queue()
+
+        self.simulation = simulationDaVinci
 
         # cm/sec
         self.defaultPoseSpeed = defaultPoseSpeed
@@ -82,14 +84,27 @@ class RavenController():
         self.queue = mp.Queue()
         self.clearStageQueue = mp.Queue()
 
-        if arm == raven_constants.Arm.Left:
-            self.pubCmd = rospy.Publisher('/dvrk_psm2/set_cartesian_pose', PoseStamped)
-            self.stateSub = rospy.Subscriber('/dvrk_psm2/joint_position_cartesian',PoseStamped,self._stateCallback)
-            self.pubGripperAngle = rospy.Publisher('/dvrk_psm2/set_gripper_position', Float32)
+        if not self.simulation:
+            print "simulation false"
+            if arm == raven_constants.Arm.Left:
+                self.pubCmd = rospy.Publisher('/dvrk_psm2/set_cartesian_pose', PoseStamped)
+                self.stateSub = rospy.Subscriber('/dvrk_psm2/joint_position_cartesian',PoseStamped,self._stateCallback)
+                self.pubGripperAngle = rospy.Publisher('/dvrk_psm2/set_gripper_position', Float32)
+            else:
+                self.pubCmd = rospy.Publisher('/dvrk_psm1/set_cartesian_pose', PoseStamped)
+                self.stateSub = rospy.Subscriber('/dvrk_psm1/joint_position_cartesian',PoseStamped,self._stateCallback)
+                self.pubGripperAngle = rospy.Publisher('/dvrk_psm1/set_gripper_position', Float32)
         else:
-            self.pubCmd = rospy.Publisher('/dvrk_psm1/set_cartesian_pose', PoseStamped)
-            self.stateSub = rospy.Subscriber('/dvrk_psm1/joint_position_cartesian',PoseStamped,self._stateCallback)
-            self.pubGripperAngle = rospy.Publisher('/dvrk_psm1/set_gripper_position', Float32)
+            print "simulation true"
+            if arm == raven_constants.Arm.Left:
+                self.pubCmd = rospy.Publisher('/dvrk_psm/cartesian_pose_command', PoseStamped)
+                self.stateSub = rospy.Subscriber('/dvrk_psm/cartesian_pose_current',PoseStamped,self._stateCallback)
+                self.pubGripperAngle = rospy.Publisher('/dvrk_psm2/set_gripper_position', Float32)
+            else:
+                self.pubCmd = rospy.Publisher('/dvrk_psm/cartesian_pose_command', PoseStamped)
+                self.stateSub = rospy.Subscriber('/dvrk_psm/cartesian_pose_current',PoseStamped,self._stateCallback)
+                #Change this value later
+                self.pubGripperAngle = rospy.Publisher('/dvrk_psm1/set_gripper_position', Float32)
         self.pubQueue = mp.Queue()
 	
         

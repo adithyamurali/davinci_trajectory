@@ -1,0 +1,24 @@
+<robot> 
+   <robot file="myDavinci.dae"></robot> 
+   <manipulator name="left_arm">   
+     <base>one_psm_base_link</base>   
+     <effector>one_remote_center_link</effector>
+   </manipulator>
+   <manipulator name="right_arm">   
+     <base>two_psm_base_link</base>   
+     <effector>two_remote_center_link</effector>
+   </manipulator>
+<!--   <AttachedSensor name="myflashlaser">
+    <link>0_link</link>
+    <translation>-0.039 0.245 0.027</translation>
+    <rotationaxis>-0.0032 -0.8591 0.5118 178.4191</rotationaxis>
+    <sensor type="BaseFlashLidar3D">
+      <maxrange>1.0</maxrange>
+      <scantime>0.01</scantime>
+      <KK>320 240 320 240</KK>
+      <width>640</width>
+      <height>480</height>
+      <color>1 1 0</color>
+    </sensor>
+  </AttachedSensor> -->
+</robot>

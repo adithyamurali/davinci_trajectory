@@ -1,0 +1,14 @@
+<robot> 
+   <robot file="myRaven.dae"></robot> 
+   <manipulator name="left_arm">   
+     <base>base_link_L</base>   
+     <effector>tool_base_L</effector>
+   </manipulator>
+   <manipulator name="right_arm">   
+     <base>base_link_R</base>   
+     <effector>tool_base_R</effector>
+   </manipulator>
+   
+   <KinBody file="box.xml"></KinBody>
+
+</robot>
