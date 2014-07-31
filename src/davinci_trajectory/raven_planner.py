@@ -1,23 +1,21 @@
 #!/usr/bin/env python
 
 import roslib
-roslib.load_manifest('raven_2_trajectory')
+roslib.load_manifest('davinci_trajectory')
 import rospy
 from math import *
 import os
 
-from raven_2_msgs.msg import *
 from geometry_msgs.msg import *
 from std_msgs.msg import Header
+from davinci_trajectory import *
 
 from visualization_msgs.msg import Marker
 
-from raven_2_control import kinematics as kin
-from raven_2_trajectory.msg import TrajoptCall
-
 import openravepy as rave
 import trajoptpy
-import cloudprocpy
+from openravepy import *
+# import cloudprocpy
 import json
 import numpy as np
 import copy
@@ -34,10 +32,15 @@ import struct
 import tf
 import tfx
 
-from raven_2_msgs.msg import Constants
-from raven_2_utils import raven_util
-from raven_2_utils import raven_constants
-import raven_2_calibration
+from davinci_trajectory.msg import Constants
+from davinci_utils import raven_util
+from davinci_utils import raven_constants
+from davinci_trajectory.raven_controller import RavenController
+from davinci_trajectory.raven_arm import RavenArm
+# import raven_2_calibration
+
+# from raven_2_control import kinematics as kin
+from davinci_trajectory.msg import TrajoptCall
 
 from sensor_msgs.msg import PointCloud2, PointField
 
@@ -169,19 +172,26 @@ def jointRequest(n_steps, endJointPositions, startPoses, endPoses, toolFrames, m
 
 class RavenPlanner:
     rosJointTypes = [Constants.JOINT_TYPE_SHOULDER,
-                     Constants.JOINT_TYPE_ELBOW,
+                     Constants.JOINT_TYPE_YAW,
+                     Constants.JOINT_TYPE_PITCH,
+                     Constants.JOINT_TYPE_PITCH,
                      Constants.JOINT_TYPE_INSERTION,
+                     Constants.JOINT_TYPE_ROTATION,
                      Constants.JOINT_TYPE_ROTATION,
                      Constants.JOINT_TYPE_PITCH,
                      Constants.JOINT_TYPE_YAW]
 
-    raveJointNamesPrefixes = ["shoulder",
-                              "elbow",
-                              "insertion",
-                               "tool_roll",
-                              "wrist_joint",
-                              "grasper_yaw"]
-    
+    raveJointNamesPrefixes = ["rc_fixed_joint",
+                              "outer_yaw_joint",
+                              "outer_pitch_joint_1",
+                               "outer_pitch_joint_3",
+                              "outer_pitch_joint_5",
+                              "outer_insertion_joint",
+                              "outer_roll_joint",
+                              "outer_roll_shaft_joint",
+                              "outer_wrist_pitch_joint",
+                              "outer_wrist_yaw_joint"]
+
     defaultJointPositions = [.512, 1.6, -.2, .116, .088, 0]
     defaultJoints = dict([(jointType,jointPos) for jointType, jointPos in zip(rosJointTypes,defaultJointPositions)])
 
@@ -194,19 +204,19 @@ class RavenPlanner:
         self.addNoise = addNoise
 
         self.env = rave.Environment()
-        #self.env.SetViewer('qtcoin')
-
+        self.env.SetViewer('qtcoin')
         rospy.loginfo('Before loading model')
-        if withWorkspace:
-            ravenFile = os.path.join(roslib.packages.get_pkg_subdir('RavenDebridement','models'),'raven_with_workspace.zae')
-        else:
-            ravenFile = os.path.join(roslib.packages.get_pkg_subdir('RavenDebridement','models'),'myRaven.xml')
+        ravenFile = os.path.join(roslib.packages.get_pkg_subdir('davinci_trajectory','src/davinci_trajectory'),'myDavinci.xml')
+        # if withWorkspace:
+        #     ravenFile = os.path.join(roslib.packages.get_pkg_subdir('RavenDebridement','models'),'raven_with_workspace.zae')
+        # else:
+        #     ravenFile = os.path.join(roslib.packages.get_pkg_subdir('RavenDebridement','models'),'myRaven.xml')
 
         self.env.Load(ravenFile)
         rospy.loginfo('After loading model')
 
         self.robot = self.env.GetRobots()[0]
-        
+        print "Robot "+self.robot.GetName()+" has "+repr(self.robot.GetDOF())+" joints with values:\n"+repr(self.robot.GetDOFValues())
         self.invKinArm = dict()
         self.toolFrame = dict()
         self.manipName = dict()
@@ -293,9 +303,19 @@ class RavenPlanner:
         self.manipJoints[armName] = self.robot.GetJoints(self.manip[armName].GetArmJoints())
 
 
-        self.raveJointNames[armName] = ['{0}_{1}'.format(name, armName[0].upper()) for name in self.raveJointNamesPrefixes]
+        self.raveJointNames[armName] = ['{0}_{1}'.format(armName, name) for name in self.raveJointNamesPrefixes]
 
         self.raveJointTypes[armName] = [self.robot.GetJointIndex(name) for name in self.raveJointNames[armName]]
+
+        print "Initialize Arm: ", armName
+
+        print "self.toolFrame[armName]: ",self.toolFrame[armName]
+        print "self.manipName[armName]: ", self.manipName[armName]
+        print "self.manip[armName]: ", self.manip[armName]
+        print "self.manipJoints[armName]: ", self.manipJoints[armName]
+        print "self.raveJointNames[armName]: ", self.raveJointNames[armName]
+        print "self.raveJointTypes[armName]: ", self.raveJointTypes[armName]
+
         self.raveJointTypesToRos[armName] = dict((rave,ros) for rave,ros in zip(self.raveJointTypes[armName], self.rosJointTypes))
         self.rosJointTypesToRave[armName] = dict((ros,rave) for ros,rave in zip(self.rosJointTypes, self.raveJointTypes[armName]))
         
@@ -307,6 +327,11 @@ class RavenPlanner:
         self.updateOpenraveJoints(armName, dict(self.defaultJoints), grasp=0)
 
         self.trajRequest[armName] = False
+
+        print "self.raveJointTypesToRos[armName]: ", self.raveJointTypesToRos[armName]
+        print "self.rosJointTypesToRave[armName]: ", self.rosJointTypesToRave[armName]
+        print "self.raveGrasperJointNames[armName]: ", self.raveGrasperJointNames[armName]
+        print "self.raveGrasperJointTypes[armName]: ", self.raveGrasperJointTypes[armName]
 
     def _ravenStateCallback(self, msg):
         self.currentState = msg
@@ -397,7 +422,7 @@ class RavenPlanner:
                           rotation, pitch, yaw, grasp (self.currentGrasp)
         """
         rosJoints = joints1
-        
+        print "rosJoints", rosJoints
         if rosJoints is None:
             rosJoints = self.getCurrentJoints(armName)
             if rosJoints is None:
@@ -415,6 +440,7 @@ class RavenPlanner:
                 
                 # since not a hard limit, must do this
                 if rosJointType == Constants.JOINT_TYPE_ROTATION:
+                    print rosJointType
                     lim = self.robot.GetJointFromDOFIndex(raveJointType).GetLimits()
                     limLower, limUpper = lim[0][0], lim[1][0]
                     jointPos = raven_util.setWithinLimits(jointPos, limLower, limUpper, 2*pi)
@@ -1205,12 +1231,52 @@ def testRavenCpp():
     rospy.spin()
     
 
-if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--show',action='store_true',default=False)
+
+
+def testExecuteTrajopt(arm=raven_constants.Arm.Right):
+    rospy.init_node('rave_arm_node',anonymous=True)
+    ravenArm = RavenArm(arm)
+    ravenPlanner = RavenPlanner(arm)
+    rospy.sleep(2)
+
+    angle = tfx.tb_angles(0,90,0)
+    endPose = tfx.pose([-.073, -.014, -.15], angle,frame=raven_constants.Frames.Link0)
+
+
+    ravenArm.start()
+
+    rospy.loginfo('Press enter to go to endPose using joint commands')
+    raw_input()
+
+    desJoints = ravenPlanner.getJointsFromPose(endPose)
+    currJoints = ravenArm.getCurrentJoints()
+
+    endJointTraj = ravenPlanner.getTrajectoryFromPose(endPose)
+
+    rospy.loginfo('Found joints')
+    for jointType, jointPos in desJoints.items():
+        print("desired: jointType = {0}, jointPos = {1}".format(jointType,jointPos))
+        print("current: jointType = {0}, jointPos = {1}".format(jointType,currJoints[jointType]))
+
+
+    rospy.loginfo('Press enter to move')
+    raw_input()
     
-    args = parser.parse_args()
-    testSwitchPlaces(**vars(args))
+    # ravenArm.executeJointTrajectory(endJointTraj)
+
+    code.interact(local=locals())
+
+    rospy.loginfo('Press enter to exit')
+    raw_input()   
+
+
+if __name__ == '__main__':
+    # import argparse
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('--show',action='store_true',default=False)
+    
+    # args = parser.parse_args()
+    # testSwitchPlaces(**vars(args))
     #testFromAbove(**vars(args))
     #testRavenCpp()
+    testExecuteTrajopt()
