@@ -302,16 +302,16 @@ class RavenPlanner:
 
         print "Initialize Arm: ", armName
 
-        print "self.toolFrame[armName]: ",self.toolFrame[armName]
-        print "self.manipName[armName]: ", self.manipName[armName]
-        print "self.manip[armName]: ", self.manip[armName]
-        print "self.manipJoints[armName]: ", self.manipJoints[armName]
-        print "self.raveJointNames[armName]: ", self.raveJointNames[armName]
-        print "self.raveJointTypes[armName]: ", self.raveJointTypes[armName]
+        # print "self.toolFrame[armName]: ",self.toolFrame[armName]
+        # print "self.manipName[armName]: ", self.manipName[armName]
+        # print "self.manip[armName]: ", self.manip[armName]
+        # print "self.manipJoints[armName]: ", self.manipJoints[armName]
+        # print "self.raveJointNames[armName]: ", self.raveJointNames[armName]
+        # print "self.raveJointTypes[armName]: ", self.raveJointTypes[armName]
 
         self.raveJointTypesToRos[armName] = dict((rave,ros) for rave,ros in zip(self.raveJointTypes[armName], self.rosJointTypes))
         self.rosJointTypesToRave[armName] = dict((ros,rave) for ros,rave in zip(self.rosJointTypes, self.raveJointTypes[armName]))
-        
+
         self.raveGrasperJointNames[armName] = ['grasper_joint_1_{0}'.format(armName[0].upper()), 'grasper_joint_2_{0}'.format(armName[0].upper())]
         self.raveGrasperJointTypes[armName] = [self.robot.GetJointIndex(name) for name in self.raveGrasperJointNames[armName]]
         
@@ -321,10 +321,13 @@ class RavenPlanner:
 
         self.trajRequest[armName] = False
 
-        print "self.raveJointTypesToRos[armName]: ", self.raveJointTypesToRos[armName]
-        print "self.rosJointTypesToRave[armName]: ", self.rosJointTypesToRave[armName]
+        # print "self.raveJointTypesToRos[armName]: ", self.raveJointTypesToRos[armName]
+        # print "self.rosJointTypesToRave[armName]: ", self.rosJointTypesToRave[armName]
         print "self.raveGrasperJointNames[armName]: ", self.raveGrasperJointNames[armName]
         print "self.raveGrasperJointTypes[armName]: ", self.raveGrasperJointTypes[armName]
+
+        print "XXXXXX"
+        print self.getCurrentJoints(armName)
 
     def _ravenStateCallback(self, msg):
         self.currentState = msg
@@ -334,14 +337,14 @@ class RavenPlanner:
             return None
         currentPose = {}
         for arm in self.currentState.arms:
-            armPose = tfx.pose(arm.tool.pose,header=self.currentState.header)
+            armPose = tfx.pose(arm.tool.pose, header=self.currentState.header)
             if armName is None:
                 currentPose[arm.name] = armPose
             elif arm.name == armName:
                 currentPose = armPose
                 break
         return currentPose
-                    
+
     def getCurrentGrasp(self, armName = None):
         if not self.currentState:
             return None
@@ -355,7 +358,7 @@ class RavenPlanner:
                 break
         print currentGrasp
         return currentGrasp
-                    
+
     def getCurrentJoints(self, armName=None):
         if not self.currentState:
             return None
@@ -375,9 +378,7 @@ class RavenPlanner:
             while self.currentState is None and not rospy.is_shutdown():
                 rospy.sleep(.05)
             print 'got it!'
-            
 
-    
     def getJointsFromPose(self, armName, pose, grasp, quiet=False):
         """
         Calls IK server and returns a dictionary of {jointType : jointPos}
@@ -449,6 +450,7 @@ class RavenPlanner:
             jointPositions += [grasp/2, -grasp/2]
 
         rospy.loginfo('Setting joints')
+        print "jointPositions: ", jointPositions, "raveJointTypes: ", raveJointTypes
         self.robot.SetJointValues(jointPositions, raveJointTypes)
         rospy.loginfo('Done setting joints')
 

@@ -7,6 +7,7 @@ from math import *
 import os
 
 from geometry_msgs.msg import *
+from sensor_msgs.msg import JointState
 from std_msgs.msg import Header
 from davinci_trajectory import *
 
@@ -131,7 +132,7 @@ def jointRequest(n_steps, endJointPositions, startPoses, endPoses, toolFrames, m
             "endpoint" : endJointPositions
             }
         }
-    
+
     for startPose, endPose, toolFrame, manip, approachDir in zip(startPoses, endPoses, toolFrames, manips, approachDirs):
             if approachDir is not None and tfx.point(np.array(endPose.position.list) - np.array(startPose.position.list)).norm > approachDist:
                 #pose = tfx.pose(endPose)
@@ -167,32 +168,94 @@ def jointRequest(n_steps, endJointPositions, startPoses, endPoses, toolFrames, m
     return request
 
 
-
-
-
 class RavenPlanner:
     rosJointTypes = [Constants.JOINT_TYPE_SHOULDER,
-                     Constants.JOINT_TYPE_YAW,
-                     Constants.JOINT_TYPE_PITCH,
-                     Constants.JOINT_TYPE_PITCH,
+                     Constants.JOINT_TYPE_ELBOW,
                      Constants.JOINT_TYPE_INSERTION,
-                     Constants.JOINT_TYPE_ROTATION,
                      Constants.JOINT_TYPE_ROTATION,
                      Constants.JOINT_TYPE_PITCH,
                      Constants.JOINT_TYPE_YAW]
 
-    raveJointNamesPrefixes = ["rc_fixed_joint",
-                              "outer_yaw_joint",
-                              "outer_pitch_joint_1",
-                               "outer_pitch_joint_3",
-                              "outer_pitch_joint_5",
+    raveJointNamesPrefixes = ["outer_yaw_joint",
+                              "outer_pitch_joint",
                               "outer_insertion_joint",
                               "outer_roll_joint",
-                              "outer_roll_shaft_joint",
                               "outer_wrist_pitch_joint",
                               "outer_wrist_yaw_joint"]
 
-    defaultJointPositions = [.512, 1.6, -.2, .116, .088, 0]
+
+    # rosJointTypes = [Constants.JOINT_TYPE_SHOULDER,
+    #                  Constants.JOINT_TYPE_ELBOW,
+    #                  Constants.JOINT_TYPE_INSERTION,
+    #                  Constants.JOINT_TYPE_ROTATION,
+    #                  Constants.JOINT_TYPE_PITCH,
+    #                  Constants.JOINT_TYPE_YAW,
+    #                  Constants.JOINT_TYPE_PITCH_1,
+    #                  Constants.JOINT_TYPE_PITCH_2,
+    #                  Constants.JOINT_TYPE_PITCH_3,
+    #                  Constants.JOINT_TYPE_PITCH_4]
+
+    # raveJointNamesPrefixes = ["outer_yaw_joint",
+    #                           "outer_pitch_joint_1",
+    #                           "outer_insertion_joint",
+    #                           "outer_roll_joint",
+    #                           "outer_wrist_pitch_joint",
+    #                           "outer_wrist_yaw_joint",
+    #                           "outer_pitch_joint_2",
+    #                           "outer_pitch_joint_3",
+    #                           "outer_pitch_joint_4",
+    #                           "outer_pitch_joint_5"
+    #                           ]
+
+    # 'one_outer_pitch_joint_2',
+# 'two_outer_pitch_joint_2', 
+# 'one_outer_pitch_joint_3', 
+# 'two_outer_pitch_joint_3', 
+# 'one_outer_pitch_joint_4', 
+# 'two_outer_pitch_joint_4', 
+# 'one_outer_pitch_joint_5', 
+# 'two_outer_pitch_joint_5', 
+# 'one_outer_wrist_open_angle_joint_2', 
+# 'two_outer_wrist_open_angle_joint_2']
+
+# ['two_outer_yaw_joint', 
+# 'two_outer_pitch_joint_1', 
+# 'two_outer_insertion_joint', 
+# 'two_outer_roll_joint', 
+# 'two_outer_wrist_pitch_joint', 
+# 'two_outer_wrist_yaw_joint', 
+# 'two_outer_wrist_open_angle_joint_1', 
+# 'one_outer_yaw_joint', 
+# 'one_outer_pitch_joint_1', 
+# 'one_outer_insertion_joint', 
+# 'one_outer_roll_joint', 
+# 'one_outer_wrist_pitch_joint', 
+# 'one_outer_wrist_yaw_joint', 
+# 'one_outer_wrist_open_angle_joint_1', 
+# 'one_outer_pitch_joint_2',
+# 'two_outer_pitch_joint_2', 
+# 'one_outer_pitch_joint_3', 
+# 'two_outer_pitch_joint_3', 
+# 'one_outer_pitch_joint_4', 
+# 'two_outer_pitch_joint_4', 
+# 'one_outer_pitch_joint_5', 
+# 'two_outer_pitch_joint_5', 
+# 'one_outer_wrist_open_angle_joint_2', 
+# 'two_outer_wrist_open_angle_joint_2']
+
+    # defaultJointPositions = [.512, 1.6, -.2, .116, .088, 0]
+
+    # name: ['two_outer_yaw_joint', 'two_outer_pitch_joint_1', 'two_outer_insertion_joint', 'two_outer_roll_joint', 'two_outer_wrist_pitch_joint', 'two_outer_wrist_yaw_joint', 'two_outer_wrist_open_angle_joint_1', 
+    # 'one_outer_yaw_joint', 'one_outer_pitch_joint_1', 'one_outer_insertion_joint', 'one_outer_roll_joint', 'one_outer_wrist_pitch_joint', 'one_outer_wrist_yaw_joint', 'one_outer_wrist_open_angle_joint_1', 'one_outer_pitch_joint_2', 'two_outer_pitch_joint_2', 'one_outer_pitch_joint_3', 'two_outer_pitch_joint_3', 'one_outer_pitch_joint_4', 'two_outer_pitch_joint_4', 'one_outer_pitch_joint_5', 'two_outer_pitch_joint_5', 'one_outer_wrist_open_angle_joint_2', 'two_outer_wrist_open_angle_joint_2']
+    # position: [-0.02281092664379571, -0.0797179378003282, 0.10334651728773, -4.5371080252078135, 0.10398600999497044, 0.08435656802729748, 0.17477791546218607, -0.0797179378003282, 0.016641416001991538, 0.0797179378003282, -0.016641416001991538, 0.0797179378003282, -0.016641416001991538, -0.0797179378003282, 0.016641416001991538, -0.17477791546218607, -0.47385729040944574]
+
+    # two_outer_yaw_joint....
+    defaultJointPositions = [-0.02281092664379571, -0.0797179378003282, 0.10334651728773, -4.5371080252078135, 0.10398600999497044, 0.08435656802729748, 0.17477791546218607]
+    # defaultJointPositions = [-0.02281092664379571, -0.0797179378003282, 0.10334651728773, -4.5371080252078135, 0.10398600999497044, 0]
+
+    # one_outer_yaw_joint....
+    # defaultJointPositions = [-0.0797179378003282, 0.016641416001991538, 0.0797179378003282, -0.016641416001991538, 0.0797179378003282, -0.016641416001991538]
+
     defaultJoints = dict([(jointType,jointPos) for jointType, jointPos in zip(rosJointTypes,defaultJointPositions)])
 
     def __init__(self, armNames, errorModel=None, thread=True, withWorkspace=False, addNoise=False):
@@ -200,9 +263,10 @@ class RavenPlanner:
             armNames = [armNames]
         self.armNames = sorted(armNames)
         self.errorModel = errorModel
-        self.refFrame = raven_constants.Frames.Link0
+        self.refFrame = raven_constants.Frames.World
+        self.currentJoints = {}
+        self.currentGrasp = {}
         self.addNoise = addNoise
-
         self.env = rave.Environment()
         self.env.SetViewer('qtcoin')
         rospy.loginfo('Before loading model')
@@ -248,15 +312,24 @@ class RavenPlanner:
         self.approachDir = dict()
         
         activeDOFs = []
+
+        print "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+        #Da Vinci subscribers. Note psm2 is one and psm1 is two, swap happened in urdf
+        self.jointSub = rospy.Subscriber('/joint_states', JointState,self._stateCallback_joint)
+        for armName in self.armNames:
+            if armName == "one":
+                self.stateSubOne = rospy.Subscriber('/dvrk_psm2/joint_position_cartesian',PoseStamped,self._stateCallback_one)
+            else:
+                self.stateSubTwo = rospy.Subscriber('/dvrk_psm1/joint_position_cartesian',PoseStamped,self._stateCallback_two)
+
         for armName in self.armNames:
             self._init_arm(armName)
             activeDOFs += self.raveJointTypes[armName]
             
         self.robot.SetActiveDOFs(activeDOFs)
         
-        self.currentState = None
-        rospy.Subscriber(raven_constants.RavenTopics.RavenState, RavenState, self._ravenStateCallback)
-        
+        self.currentPose = {}
+
         self.start_pose_pubs = dict((armName, rospy.Publisher('planner_%s_start' % armName,PoseStamped)) for armName in self.armNames)
         self.end_pose_pubs = dict((armName, rospy.Publisher('planner_%s_end' % armName,PoseStamped)) for armName in self.armNames)
         
@@ -280,7 +353,7 @@ class RavenPlanner:
             workspace_file = rospy.get_param('workspace_constraints')
             workspace_file = os.path.join(roslib.packages.get_pkg_subdir('raven_2_params', 'data'), workspace_file)
             self.load_workspace(workspace_file)
-                
+
         self.lock = threading.RLock()
         if thread:
             self.thread = threading.Thread(target=self.optimizeLoop)
@@ -302,7 +375,6 @@ class RavenPlanner:
         self.manip[armName] = self.robot.GetActiveManipulator()
         self.manipJoints[armName] = self.robot.GetJoints(self.manip[armName].GetArmJoints())
 
-
         self.raveJointNames[armName] = ['{0}_{1}'.format(armName, name) for name in self.raveJointNamesPrefixes]
 
         self.raveJointTypes[armName] = [self.robot.GetJointIndex(name) for name in self.raveJointNames[armName]]
@@ -319,8 +391,14 @@ class RavenPlanner:
         self.raveJointTypesToRos[armName] = dict((rave,ros) for rave,ros in zip(self.raveJointTypes[armName], self.rosJointTypes))
         self.rosJointTypesToRave[armName] = dict((ros,rave) for ros,rave in zip(self.rosJointTypes, self.raveJointTypes[armName]))
         
-        self.raveGrasperJointNames[armName] = ['grasper_joint_1_{0}'.format(armName[0].upper()), 'grasper_joint_2_{0}'.format(armName[0].upper())]
+        self.raveGrasperJointNames[armName] = ['{0}_outer_wrist_open_angle_joint_1'.format(armName), '{0}_outer_wrist_open_angle_joint_2'.format(armName)]
         self.raveGrasperJointTypes[armName] = [self.robot.GetJointIndex(name) for name in self.raveGrasperJointNames[armName]]
+
+
+        print "self.raveJointTypesToRos[armName]: ", self.raveJointTypesToRos[armName]
+        print "self.rosJointTypesToRave[armName]: ", self.rosJointTypesToRave[armName]
+        print "self.raveGrasperJointNames[armName]: ", self.raveGrasperJointNames[armName]
+        print "self.raveGrasperJointTypes[armName]: ", self.raveGrasperJointTypes[armName]
         
         self.approachDir[armName] = None
         
@@ -328,77 +406,91 @@ class RavenPlanner:
 
         self.trajRequest[armName] = False
 
-        print "self.raveJointTypesToRos[armName]: ", self.raveJointTypesToRos[armName]
-        print "self.rosJointTypesToRave[armName]: ", self.rosJointTypesToRave[armName]
-        print "self.raveGrasperJointNames[armName]: ", self.raveGrasperJointNames[armName]
-        print "self.raveGrasperJointTypes[armName]: ", self.raveGrasperJointTypes[armName]
+# name: ['two_outer_yaw_joint', 'two_outer_pitch_joint_1', 'two_outer_insertion_joint', 'two_outer_roll_joint', 'two_outer_wrist_pitch_joint', 'two_outer_wrist_yaw_joint', 'two_outer_wrist_open_angle_joint_1', 'one_outer_yaw_joint', 'one_outer_pitch_joint_1', 'one_outer_insertion_joint', 'one_outer_roll_joint', 'one_outer_wrist_pitch_joint', 'one_outer_wrist_yaw_joint', 'one_outer_wrist_open_angle_joint_1', 'one_outer_pitch_joint_2', 'two_outer_pitch_joint_2', 'one_outer_pitch_joint_3', 'two_outer_pitch_joint_3', 'one_outer_pitch_joint_4', 'two_outer_pitch_joint_4', 'one_outer_pitch_joint_5', 'two_outer_pitch_joint_5', 'one_outer_wrist_open_angle_joint_2', 'two_outer_wrist_open_angle_joint_2']
+# position: [0.4095490467989196, -0.12113206229672174, 0.09986621180110349, -4.536534268397678, 0.10078752386347294, 0.05794637289999498, 0.17470641661273542, -0.1973489559470919, -0.08838142244191904, 0.10332137444469022, -4.524539249^C928238, 0.07401438031144074, 0.0768723268145181, 0.17463017852655816, -0.08838142244191904, -0.12113206229672174, 0.08838142244191904, 0.12113206229672174, 0.08838142244191904, 0.12113206229672174, -0.08838142244191904, -0.12113206229672174, -0.17463017852655816, -0.17470641661273542]
+# velocity: []
+# effort: []
 
-    def _ravenStateCallback(self, msg):
-        self.currentState = msg
-    
+    def _stateCallback_one(self, msg):
+        self.currentPose["one"] = msg
+        # print "YY-- One Pose: ", msg
+
+    def _stateCallback_two(self, msg):
+        self.currentPose["two"] = msg
+        # print "UU-- Two Pose: ", msg
+
+    def _stateCallback_joint(self, msg):
+        # print "In callback"
+        davinciJointPosition = msg.position
+        rosJointTypes = [Constants.JOINT_TYPE_SHOULDER,
+                         Constants.JOINT_TYPE_ELBOW,
+                         Constants.JOINT_TYPE_INSERTION,
+                         Constants.JOINT_TYPE_ROTATION,
+                         Constants.JOINT_TYPE_PITCH,
+                         Constants.JOINT_TYPE_YAW]
+        # Note, the indices were hard coded based on the JointState message from DVRK rosBridge.
+        one_joints = davinciJointPosition[0:6]
+        one_currentGrasp = davinciJointPosition[6]
+        two_joints = davinciJointPosition[7:12]
+        two_currentGrasp = davinciJointPosition[13]
+        one_jointType_and_Position = zip(rosJointTypes, one_joints)
+        two_jointType_and_Position = zip(rosJointTypes, two_joints)
+        self.currentJoints["one"] = dict((jointType, position) for (jointType, position) in one_jointType_and_Position)
+        self.currentJoints["two"] = dict((jointType, position) for (jointType, position) in two_jointType_and_Position)
+        self.currentGrasp["one"] = one_currentGrasp
+        self.currentGrasp["two"] = two_currentGrasp
+        # print "XX--Grasp: ", self.currentGrasp
+        # print "WW--Joints: ", self.currentJoints
+
     def getCurrentPose(self, armName=None):
-        if not self.currentState:
+        if len(self.currentPose) == 0:
             return None
         currentPose = {}
-        for arm in self.currentState.arms:
-            armPose = tfx.pose(arm.tool.pose,header=self.currentState.header)
-            if armName is None:
-                currentPose[arm.name] = armPose
-            elif arm.name == armName:
-                currentPose = armPose
-                break
-        return currentPose
-                    
+        if armName is None:
+            return self.currentPose
+        return self.currentPose[armName]
+
     def getCurrentGrasp(self, armName = None):
-        if not self.currentState:
+        if len(self.currentGrasp) == 0:
             return None
-        currentGrasp = {}
-        for arm in self.currentState.arms:
-            armGrasp = dict((joint.type, joint.position) for joint in arm.joints)[Constants.JOINT_TYPE_GRASP]
-            if armName is None:
-                currentGrasp[arm.name] = armGrasp
-            elif arm.name == armName:
-                currentGrasp = armGrasp
-                break
-        print currentGrasp
-        return currentGrasp
-                    
+        if armName is None:
+            return self.currentGrasp
+        return self.currentGrasp[armName]
+
     def getCurrentJoints(self, armName=None):
-        if not self.currentState:
+        if len(self.currentJoints) == 0:
             return None
-        currentJoints = {}
-        for arm in self.currentState.arms:
-            armJoints = dict((joint.type, joint.position) for joint in arm.joints)
-            if armName is None:
-                currentJoints[arm.name] = armJoints
-            elif arm.name == armName:
-                currentJoints = armJoints
-                break
-        return currentJoints
-    
+        if armName is None:
+            return self.currentJoints
+        return self.currentJoints[armName]        
+   
     def waitForState(self):
-        if not self.currentState:
+        if len(self.currentJoints) == 0 or len(self.currentPose) == 0 or len(self.currentGrasp) == 0:
             print 'waiting for ravenstate'
-            while self.currentState is None and not rospy.is_shutdown():
+            # while self.currentState is None and not rospy.is_shutdown():
+            while True:
                 rospy.sleep(.05)
+                if len(self.currentJoints) != 0 and len(self.currentPose) != 0 and len(self.currentGrasp) != 0:
+                    break;
+
             print 'got it!'
             
 
-    
     def getJointsFromPose(self, armName, pose, grasp, quiet=False):
         """
         Calls IK server and returns a dictionary of {jointType : jointPos}
-        
+
         jointType is from raven_2_msgs.msg.Constants
         jointPos is position in radians
 
         Needs to return finger1 and finger2
         """
-
+        a = tfx.pose(pose)
+        print self.refFrame, a.frame
         pose = raven_util.convertToFrame(tfx.pose(pose), self.refFrame)
-        
+
         joints = kin.invArmKin(armName, pose, grasp)
-        
+
         if joints is None:
             rospy.loginfo('IK failed!')
             if quiet:
@@ -435,6 +527,7 @@ class RavenPlanner:
         jointPositions = []
         for rosJointType, jointPos in rosJoints.items():
             if self.rosJointTypesToRave[armName].has_key(rosJointType):
+                # IPython.embed()
                 raveJointType = self.rosJointTypesToRave[armName][rosJointType]
                 raveJointTypes.append(raveJointType)
                 
@@ -447,6 +540,7 @@ class RavenPlanner:
                 
                 jointPositions.append(jointPos)
                 
+# jointPositions:  [0.512, 1.6, -0.2, 0.116, 0.088, 0, 0, 0] raveJointTypes:  [7, 8, 9, 10, 11, 12, -1, -1]
 
         # for opening the gripper
         raveJointTypes += self.raveGrasperJointTypes[armName]
@@ -457,6 +551,7 @@ class RavenPlanner:
             jointPositions += [grasp/2, -grasp/2]
 
         rospy.loginfo('Setting joints')
+        print "jointPositions: ", jointPositions, "raveJointTypes: ", raveJointTypes
         self.robot.SetJointValues(jointPositions, raveJointTypes)
         rospy.loginfo('Done setting joints')
 
@@ -676,31 +771,33 @@ class RavenPlanner:
     def setStartJointsAndEndPose(self, armName, startJoints, endPose,**kwargs):
         startGrasp = kwargs.get('startGrasp',kwargs.get('grasp',0))
         endGrasp = kwargs.get('endGrasp',kwargs.get('grasp',0))
+        # endJoints = self.getCurrentJoints(armName)
         endJoints = self.getJointsFromPose(armName, endPose, grasp=endGrasp)
-        
+
         self.trajStartGrasp[armName] = startGrasp
         self.trajEndGrasp[armName] = endGrasp
-        endPose = raven_util.convertToFrame(tfx.pose(endPose), raven_constants.Frames.Link0)
+        # endPose = raven_util.convertToFrame(tfx.pose(endPose), raven_constants.Frames.Link0)
         self.trajStartJoints[armName] = startJoints
         self.trajEndJoints[armName] = endJoints
     
     def setStartPoseAndEndJoints(self, armName, startPose, endJoints, **kwargs):
         startGrasp = kwargs.get('startGrasp',kwargs.get('grasp',0))
         endGrasp = kwargs.get('endGrasp',kwargs.get('grasp',0))
-        startJoints = self.getJointsFromPose(armName, startPose, grasp=startGrasp)
+        endJoints = self.getCurrentJoints(armName)
+        # startJoints = self.getJointsFromPose(armName, startPose, grasp=startGrasp)
         
         self.trajStartGrasp[armName] = startGrasp
         self.trajEndGrasp[armName] = endGrasp
-        startPose = raven_util.convertToFrame(tfx.pose(startPose), raven_constants.Frames.Link0)
+        # startPose = raven_util.convertToFrame(tfx.pose(startPose), raven_constants.Frames.Link0)
         self.trajStartJoints[armName] = startJoints
         self.trajEndJoints[armName] = endJoints
     
     def setStartAndEndPose(self, armName, startPose, endPose, **kwargs):
         startGrasp = kwargs.get('startGrasp',kwargs.get('grasp',0))
         endGrasp = kwargs.get('endGrasp',kwargs.get('grasp',0))
+        
         startJoints = self.getJointsFromPose(armName, startPose, grasp=startGrasp)
         endJoints = self.getJointsFromPose(armName, endPose, grasp=endGrasp)
-        
         self.trajStartGrasp[armName] = startGrasp
         self.trajEndGrasp[armName] = endGrasp
         startPose = raven_util.convertToFrame(tfx.pose(startPose), raven_constants.Frames.Link0)
@@ -736,8 +833,8 @@ class RavenPlanner:
         startGrasp = self.getCurrentGrasp(armName)
         if endGrasp is None:
             endGrasp = startGrasp
-        if self.errorModel is not None:
-            endPose, endPoseOffset = self.errorModel.predictSinglePose(armName, endPose, endPose) # << this is wrong, need true delta
+        # if self.errorModel is not None:
+        #     endPose, endPoseOffset = self.errorModel.predictSinglePose(armName, endPose, endPose) # << this is wrong, need true delta
 
         self.setStartAndEndPose(armName, startPose, endPose, startGrasp=startGrasp, endGrasp=endGrasp)
         self.trajSteps[armName] = n_steps
@@ -1240,7 +1337,7 @@ def testExecuteTrajopt(arm=raven_constants.Arm.Right):
     rospy.sleep(2)
 
     angle = tfx.tb_angles(0,90,0)
-    endPose = tfx.pose([-.073, -.014, -.15], angle,frame=raven_constants.Frames.Link0)
+    endPose = tfx.pose([-.073, -.014, -.15], angle,frame=raven_constants.Frames.RightRCM)
 
 
     ravenArm.start()
@@ -1248,15 +1345,17 @@ def testExecuteTrajopt(arm=raven_constants.Arm.Right):
     rospy.loginfo('Press enter to go to endPose using joint commands')
     raw_input()
 
-    desJoints = ravenPlanner.getJointsFromPose(endPose)
-    currJoints = ravenArm.getCurrentJoints()
+    # desJoints = ravenPlanner.getJointsFromPose(endPose)
+    # currJoints = ravenArm.getCurrentJoints()
 
-    endJointTraj = ravenPlanner.getTrajectoryFromPose(endPose)
+    endJointTraj = ravenPlanner.getTrajectoryFromPose("two",endPose)
 
-    rospy.loginfo('Found joints')
-    for jointType, jointPos in desJoints.items():
-        print("desired: jointType = {0}, jointPos = {1}".format(jointType,jointPos))
-        print("current: jointType = {0}, jointPos = {1}".format(jointType,currJoints[jointType]))
+    print "End Joint Traj: ", endJointTraj
+
+    # rospy.loginfo('Found joints')
+    # for jointType, jointPos in desJoints.items():
+    #     print("desired: jointType = {0}, jointPos = {1}".format(jointType,jointPos))
+    #     print("current: jointType = {0}, jointPos = {1}".format(jointType,currJoints[jointType]))
 
 
     rospy.loginfo('Press enter to move')
@@ -1269,6 +1368,90 @@ def testExecuteTrajopt(arm=raven_constants.Arm.Right):
     rospy.loginfo('Press enter to exit')
     raw_input()   
 
+    # rosJointTypes = [Constants.JOINT_TYPE_SHOULDER,
+    #                  Constants.JOINT_TYPE_YAW,
+    #                  Constants.JOINT_TYPE_PITCH,
+    #                  Constants.JOINT_TYPE_PITCH,
+    #                  Constants.JOINT_TYPE_INSERTION,
+    #                  Constants.JOINT_TYPE_ROTATION,
+    #                  Constants.JOINT_TYPE_ROTATION,
+    #                  Constants.JOINT_TYPE_PITCH,
+    #                  Constants.JOINT_TYPE_YAW]
+
+    # raveJointNamesPrefixes = ["rc_fixed_joint",
+    #                           "outer_yaw_joint",
+    #                           "outer_pitch_joint_1",
+    #                            "outer_pitch_joint_3",
+    #                           "outer_pitch_joint_5",
+    #                           "outer_insertion_joint",
+    #                           "outer_roll_joint",
+    #                           "outer_roll_shaft_joint",
+    #                           "outer_wrist_pitch_joint",
+    #                           "outer_wrist_yaw_joint"]
+
+
+# ['two_outer_yaw_joint', 
+# 'two_outer_pitch_joint_1', 
+# 'two_outer_insertion_joint', 
+# 'two_outer_roll_joint', 
+# 'two_outer_wrist_pitch_joint', 
+# 'two_outer_wrist_yaw_joint', 
+# 'two_outer_wrist_open_angle_joint_1', 
+# 'one_outer_yaw_joint', 
+# 'one_outer_pitch_joint_1', 
+# 'one_outer_insertion_joint', 
+# 'one_outer_roll_joint', 
+# 'one_outer_wrist_pitch_joint', 
+# 'one_outer_wrist_yaw_joint', 
+# 'one_outer_wrist_open_angle_joint_1', 
+# 'one_outer_pitch_joint_2',
+# 'two_outer_pitch_joint_2', 
+# 'one_outer_pitch_joint_3', 
+# 'two_outer_pitch_joint_3', 
+# 'one_outer_pitch_joint_4', 
+# 'two_outer_pitch_joint_4', 
+# 'one_outer_pitch_joint_5', 
+# 'two_outer_pitch_joint_5', 
+# 'one_outer_wrist_open_angle_joint_2', 
+# 'two_outer_wrist_open_angle_joint_2']
+
+
+
+
+def testRavenPlannerSubscribers(arm=raven_constants.Arm.Right):
+    rospy.init_node('rave_arm_node',anonymous=True)
+    ravenArm = RavenArm(arm)
+    ravenPlanner = RavenPlanner(arm)
+    rospy.sleep(2)
+
+    # angle = tfx.tb_angles(0,90,0)
+    # endPose = tfx.pose([-.073, -.014, -.15], angle,frame=raven_constants.Frames.Link0)
+
+    ravenArm.start()
+
+    # rospy.loginfo('Press enter to go to endPose using joint commands')
+    # raw_input()
+
+    # desJoints = ravenPlanner.getJointsFromPose(endPose)
+    # currJoints = ravenArm.getCurrentJoints()
+
+    # endJointTraj = ravenPlanner.getTrajectoryFromPose(endPose)
+
+    # rospy.loginfo('Found joints')
+    # for jointType, jointPos in desJoints.items():
+    #     print("desired: jointType = {0}, jointPos = {1}".format(jointType,jointPos))
+    #     print("current: jointType = {0}, jointPos = {1}".format(jointType,currJoints[jointType]))
+
+
+    # rospy.loginfo('Press enter to move')
+    # raw_input()
+    
+    # # ravenArm.executeJointTrajectory(endJointTraj)
+
+    # code.interact(local=locals())
+
+    rospy.loginfo('Press enter to exit')
+    raw_input()
 
 if __name__ == '__main__':
     # import argparse
@@ -1280,3 +1463,4 @@ if __name__ == '__main__':
     #testFromAbove(**vars(args))
     #testRavenCpp()
     testExecuteTrajopt()
+    # testRavenPlannerSubscribers()

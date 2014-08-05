@@ -26,7 +26,7 @@ class RavenArm:
     Class for controlling the end effectors of the Raven
     """
 
-    def __init__ (self, armName, simulationDaVinci = False, closedGraspValue=0.,defaultPoseSpeed=.01):
+    def __init__ (self, armName, simulationDaVinci = False, closedGraspValue=0.,defaultPoseSpeed=.011):
         self.armName = armName
 
         if armName == raven_constants.Arm.Left:
@@ -322,7 +322,7 @@ class RavenArm:
     # state info methods  #
     #######################
 
-    def getGripperPose(self,frame=raven_constants.Frames.Link0):
+    def getGripperPose(self,frame=raven_constants.Frames.World):
         """
         Returns gripper pose w.r.t. frame
 
@@ -727,6 +727,34 @@ def testGripperMove(arm=raven_constants.Arm.Left):
     print startPose
     print "End Pose:"
     print endPose
+    # ravenArm.ravenController.goToPose(endPose)
+
+    rospy.loginfo('Press enter to stop')
+    raw_input()
+
+    ravenArm.ravenController.stop()
+
+    rospy.loginfo('Press enter to exit')
+    raw_input()
+
+def testMoveStraightLine(arm=raven_constants.Arm.Right):
+    rospy.init_node('raven_commander',anonymous=True)
+    ravenArm = RavenArm(arm, False)
+    rospy.sleep(1)
+
+    ravenArm.start()
+
+    rospy.loginfo('Press enter to start')
+    raw_input()
+
+    startPose = ravenArm.ravenController.currentPose
+    delta = tfx.pose([0.05, 0.00, 0.00])
+    endPose = raven_util.endPose(startPose, delta)    
+
+    print "Start Pose:"
+    print startPose
+    print "End Pose:"
+    print endPose
     ravenArm.ravenController.goToPose(endPose)
 
     rospy.loginfo('Press enter to stop')
@@ -736,6 +764,7 @@ def testGripperMove(arm=raven_constants.Arm.Left):
 
     rospy.loginfo('Press enter to exit')
     raw_input()
+
 
 def testGripperLinearInterpolator(arm=raven_constants.Arm.Right):
     rospy.init_node('raven_commander',anonymous=True)
@@ -857,7 +886,8 @@ if __name__ == '__main__':
     #testExecuteJointTrajectory()
     #testOpenraveJoints()
     #testExecuteJointTrajectoryBSP()
-    testGripperMove()
+    # testGripperMove()
+    testMoveStraightLine()
     # testGripperLinearInterpolator()
     # testGripperPoseExecuteEndPose()
     # testGripperSetOpenAngle()
