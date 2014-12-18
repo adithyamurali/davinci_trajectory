@@ -1,0 +1,281 @@
+#!/usr/bin/env python
+
+# UC Berkeley, 2014
+
+# Executes a circular trajectory autonomously for the DVRK
+
+from __future__ import division
+
+import argparse
+
+import collections
+import math
+
+import tfx
+import rospy
+import roslib
+roslib.load_manifest('geometry_msgs')
+
+import geometry_msgs.msg as gm
+
+TrajectoryPoint = collections.namedtuple('TrajectoryPoint', ['t','point'])
+
+class Trajectory(object):
+	def __init__(self):
+		self.points = []
+
+	@property
+	def num_points(self):
+		return len(self.points)
+
+	def get_total_distance(self):
+		dist = 0
+		for i in xrange(self.num_points-1):
+			dist = dist + self.points[i].point.distance(self.points[i+1].point)
+		return dist
+
+	def get_time_scale(self, max_velocity):
+		this_max_vel = self.get_max_velocity()
+		return max_velocity / this_max_vel
+
+	def get_total_time(self, max_velocity=None):
+		if not max_velocity:
+			return self.points[-1].t
+
+		time_scale = self.get_time_scale(max_velocity)
+
+		return self.points[-1].t * time_scale
+
+	def get_min_time_diff(self, time_scale=1):
+		min_t = 10000000000
+		for i in xrange(self.num_points-1):
+			t = self.points[i].t
+			next_t = self.points[i+1].t
+
+			t_diff = next_t - t
+			if t_diff < min_t:
+				min_t = t_diff
+		return min_t / time_scale
+
+	def get_max_velocity(self, time_scale=1, index=False):
+		max_vel = 0
+		max_ind = None
+		for i in xrange(self.num_points-1):
+			pt = self.points[i].point
+			t = self.points[i].t
+			next_pt = self.points[i+1].point
+			next_t = self.points[i+1].t
+
+			vel = pt.distance(next_pt) / (next_t - t)
+
+			if vel > max_vel:
+				max_vel = vel
+				max_ind = i
+
+		max_vel = max_vel * time_scale
+		if index:
+			return max_vel, max_ind
+		else:
+			return max_vel
+
+	def get_point(self, t, time_scale=1):
+		t = t * time_scale
+		if t <= 0:
+			return self.points[0].point
+		if t > 1:
+			return self.points[-1].point
+
+		for i in xrange(self.num_points-1):
+			t_i = self.points[i].t
+			t_iplus1 = self.points[i+1].t
+			if t_i < t and t < t_iplus1:
+				t_within_interval = (t-t_i) / (t_iplus1-t_i)
+				print '  ', 'i,twi', i, t_within_interval
+				return self.points[i].point.interpolate(self.points[i+1].point, t_within_interval)
+
+class TrajectoryRunner(object):
+	def __init__(self, traj, max_vel, real):
+		self.traj = traj
+		self.max_vel = max_vel
+
+		self.orientation = tfx.rotation_tb(-90,0,180)
+
+		self.time_scale = self.traj.get_time_scale(max_vel)
+
+		self.command_pub = None
+		if real:
+			self.command_pub = rospy.Publisher('/dvrk_psm1/set_cartesian_pose', gm.PoseStamped)
+		self.command_pub2 = rospy.Publisher('/command_pose', gm.PoseStamped)
+
+		self.current_pose = None
+		if real is False:
+			self.current_pose = tfx.pose(self.traj.points[0].point, self.orientation, frame='/two_remote_center_link', stamp=True)
+		else:
+			self._current_pose_sub = rospy.Subscriber('/dvrk_psm1/joint_position_cartesian',gm.PoseStamped,self._current_pose_cb)
+
+	def send_command(self, pt):
+		pose = tfx.pose(pt, self.orientation, frame='/two_remote_center_link', stamp=True)
+
+		if self.command_pub:
+			self.command_pub.publish(pose.msg.PoseStamped())
+		self.command_pub2.publish(pose.msg.PoseStamped())
+
+	def _current_pose_cb(self, msg):
+		self.current_pose = tfx.pose(msg)
+
+	def wait_for_init(self):
+		while self.current_pose is None and not rospy.is_shutdown():
+			rospy.sleep(0.1)
+
+	def go_to_initial_trajectory_point(self):
+		num_steps = 30
+
+		curr_pt = self.current_pose.position
+		dest_pt = self.traj.points[0].point
+		
+		dist = curr_pt.distance(dest_pt)
+		t = dist / 0.01 #(self.max_vel/2)
+		step = t / num_steps
+
+		start_time = tfx.time.now()
+		current_time = tfx.time.now()
+
+		i = 0
+		for i in xrange(num_steps+1):
+			if rospy.is_shutdown():
+				break
+			#print 'step', i
+			val = (i/num_steps)
+
+			pt = curr_pt.interpolate(dest_pt, val)
+
+			self.send_command(pt)
+			if i != num_steps:
+				rospy.sleep(step)
+
+
+	def execute_trajectory(self):
+		min_time_diff = self.traj.get_min_time_diff(self.time_scale)
+		#print 'mtd', min_time_diff
+
+		start_time = tfx.time.now()
+
+		i = 0
+		while not rospy.is_shutdown():
+			i = i + 1
+			current_time = tfx.time.now()
+			time_diff = (current_time - start_time).seconds
+
+			#print i, time_diff
+
+			pt = self.traj.get_point(time_diff, self.time_scale)
+
+			#print pt
+
+			self.send_command(pt)
+
+			if time_diff > self.traj.get_total_time() / self.time_scale:
+				break
+
+			rospy.sleep(0.01)
+			#rospy.sleep(min_time_diff/3)
+
+
+def get_trajectory(name, args):
+	if name == 'circle':
+		return get_circle_traj(args)
+
+	if name == 'circle-smooth':
+		return get_circle_traj(args, args.smoothing)
+
+def get_circle_traj(args, smoothing='linear'):
+	radius = args.radius
+
+	def linear(t):
+		return t
+
+	def smoothstep(t):
+		return 3 * t**2 - 2 * t**3
+
+	def smootherstep(t):
+		return 6 * t**5 - 15 * t**4 + 10 * t**3
+
+
+	smoothing_func = locals()[smoothing]
+
+	traj = Trajectory()
+	for i in xrange(args.num_points+1):
+		t = i / args.num_points
+
+		adj_t = smoothing_func(t)
+
+		coeff = 2 * math.pi * args.num_circles
+
+		pt = tfx.point(radius * math.cos(coeff*adj_t), radius * math.sin(coeff*adj_t), -0.09)
+		traj.points.append(TrajectoryPoint(t,pt))
+	return traj
+
+def main():
+	rospy.init_node('trajectory_runner')
+	parser = argparse.ArgumentParser()
+
+	parser.add_argument('name')
+	parser.add_argument('--speed', type=float, default=0.01)
+	parser.add_argument('--num-points', type=int, default=100)
+
+	parser.add_argument('--radius', type=float, default=0.025)
+	parser.add_argument('--num-circles', type=int, default=1)
+
+	parser.add_argument('--smoothing')
+
+	parser.add_argument('--go', action='store_true', default=False)
+	parser.add_argument('--sim', action='store_true', default=False)
+
+	args = parser.parse_args()
+
+	if not ( 0 < args.speed <= 0.15):
+		parser.exit('speed wrong')
+
+	if not (0 < args.radius <= 0.03):
+		parser.exit('invalid')
+
+	if args.go:
+		real = True
+		if args.sim:
+			parser.exit("can't go when you've set sim")
+	elif args.sim:
+		real = False
+	else:
+		real = None
+
+	if real:
+		print 'fake running'
+		run(args, None)
+		val = raw_input('really run? ')
+		if val.lower() != 'yes':
+			parser.exit("you weren't sure")
+	
+	run(args, real)
+
+	
+
+def run(args, real):
+	# get trajectory
+	traj = get_trajectory(args.name, args)
+
+
+	traj_runner = TrajectoryRunner(traj, args.speed, real)
+
+	print 'Waiting for init'
+
+	traj_runner.wait_for_init()
+
+	print 'inited'
+
+	traj_runner.go_to_initial_trajectory_point()
+
+	traj_runner.execute_trajectory()
+
+
+if __name__ == '__main__':
+	main()

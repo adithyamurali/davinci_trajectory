@@ -50,7 +50,7 @@ class Stage(object):
         return cb
 
 class RavenController():
-    def __init__(self, arm, simulationDaVinci = False, closedGraspValue=0.,defaultPoseSpeed=.01):
+    def __init__(self, arm, simulationDaVinci = False, closedGraspValue=0.,defaultPoseSpeed=.03, commandFrame=None):
         self.arm = arm
 
         self.stopRunning = threading.Event()
@@ -83,34 +83,22 @@ class RavenController():
 		
         self.queue = mp.Queue()
         self.clearStageQueue = mp.Queue()
-
-        if not self.simulation:
-            print "simulation false"
-            if arm == raven_constants.Arm.Left:
-                self.pubCmd = rospy.Publisher('/dvrk_psm2/set_cartesian_pose', PoseStamped)
-                self.stateSub = rospy.Subscriber('/dvrk_psm2/joint_position_cartesian',PoseStamped,self._stateCallback)
-                self.pubGripperAngle = rospy.Publisher('/dvrk_psm2/set_gripper_position', Float32)
-            else:
-                self.pubCmd = rospy.Publisher('/dvrk_psm1/set_cartesian_pose', PoseStamped)
-                self.stateSub = rospy.Subscriber('/dvrk_psm1/joint_position_cartesian',PoseStamped,self._stateCallback)
-                self.pubGripperAngle = rospy.Publisher('/dvrk_psm1/set_gripper_position', Float32)
+        if arm == raven_constants.Arm.Left:
+            print "Left Arm publishers and subscribers"
+            self.pubCmd = rospy.Publisher('/dvrk_psm2/set_cartesian_pose', PoseStamped)
+            self.stateSub = rospy.Subscriber('/dvrk_psm2/joint_position_cartesian',PoseStamped,self._stateCallback)
+            self.pubGripperAngle = rospy.Publisher('/dvrk_psm2/set_gripper_position', Float32)
         else:
-            print "simulation true"
-            if arm == raven_constants.Arm.Left:
-                self.pubCmd = rospy.Publisher('/dvrk_psm/cartesian_pose_command', PoseStamped)
-                self.stateSub = rospy.Subscriber('/dvrk_psm/cartesian_pose_current',PoseStamped,self._stateCallback)
-                self.pubGripperAngle = rospy.Publisher('/dvrk_psm2/set_gripper_position', Float32)
-            else:
-                self.pubCmd = rospy.Publisher('/dvrk_psm/cartesian_pose_command', PoseStamped)
-                self.stateSub = rospy.Subscriber('/dvrk_psm/cartesian_pose_current',PoseStamped,self._stateCallback)
-                #Change this value later
-                self.pubGripperAngle = rospy.Publisher('/dvrk_psm1/set_gripper_position', Float32)
+            print "Right Arm publishers and subscribers"
+            self.pubCmd = rospy.Publisher('/dvrk_psm1/set_cartesian_pose', PoseStamped)
+            self.stateSub = rospy.Subscriber('/dvrk_psm1/joint_position_cartesian',PoseStamped,self._stateCallback)
+            self.pubGripperAngle = rospy.Publisher('/dvrk_psm1/set_gripper_position', Float32)
         self.pubQueue = mp.Queue()
-	
+
         
         #self.thread = None
         self.header = Header()
-        #self.header.frame_id = raven_constants.Frames.Link0
+        self.header.frame_id = commandFrame
 
         
         # actual grasp value when gripper is closed (in )
@@ -167,6 +155,7 @@ class RavenController():
             self.header.stamp = rospy.Time.now()
             cmd = self.pubQueue.get()
             cmd.header = self.header
+            # cmd.header.frame_id = '/one_remote_center_link'
             # curPoseMsg = cmd.arms[0].tool_command.pose
             # curPose = np.array([curPoseMsg.position.x, curPoseMsg.position.y, curPoseMsg.position.z ])
             #IPython.embed()
@@ -236,13 +225,11 @@ class RavenController():
         self.stopRunning = False
         self.queue.put({'stopRunning':self.stopRunning})
         return True
-    
+
         if self.thread is None or not self.thread.is_alive():
             self.thread = multiprocessing.Process(target=self.run)
             self.thread.daemon = True
             self.thread.start()
-            
-
         return True
 
     def run(self, queue, pubQueue, clearStageQueue):
@@ -477,10 +464,14 @@ class RavenController():
     ###############################
 
     def setGripperPositionDaVinci(self, angle):
-        if (angle < 1.2) & (angle >= -0.3):
+        if (angle < 2) & (angle >= -3):
             self.pubGripperAngle.publish(angle)
         else:
-            print "Unreachable PSM angle"
+            if (angle < -3):
+                self.pubGripperAngle.publish(-3)
+            if (angle > 2):
+                self.pubGripperAngle.publish(2)
+            # print "Unreachable PSM angle"
         return
     ###############################################
     # static methods for adding to a RavenCommand #

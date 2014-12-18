@@ -167,7 +167,6 @@ def jointRequest(n_steps, endJointPositions, startPoses, endPoses, toolFrames, m
 
     return request
 
-
 class RavenPlanner:
     rosJointTypes = [Constants.JOINT_TYPE_SHOULDER,
                      Constants.JOINT_TYPE_ELBOW,

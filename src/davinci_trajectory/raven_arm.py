@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+# Authors: Greg Kahn, Adithya Murali and Siddarth Sen
+# UC Berkeley, 2014
+
 import roslib; roslib.load_manifest('raven_2_trajectory')
 import numpy as np
 import os
@@ -26,20 +29,22 @@ class RavenArm:
     Class for controlling the end effectors of the Raven
     """
 
-    def __init__ (self, armName, simulationDaVinci = False, closedGraspValue=0.,defaultPoseSpeed=.011):
+    def __init__ (self, armName, simulationDaVinci = False, closedGraspValue=0.,defaultPoseSpeed=.05):
         self.armName = armName
 
         if armName == raven_constants.Arm.Left:
             self.toolFrame = raven_constants.Frames.LeftTool
         else:
             self.toolFrame = raven_constants.Frames.RightTool
-            
-        # self.commandFrame = raven_constants.Frames.Link0
-        self.commandFrame = "two_remote_center_link"
+        if armName == raven_constants.Arm.Left:
+            self.commandFrame = "one_remote_center_link"
+        else:
+            self.commandFrame = "two_remote_center_link"
 
+        # IPython.embed()
         self.simulation = simulationDaVinci
 
-        self.ravenController = RavenController(self.armName, self.simulation, closedGraspValue=closedGraspValue, defaultPoseSpeed=defaultPoseSpeed)
+        self.ravenController = RavenController(self.armName, self.simulation, closedGraspValue=closedGraspValue, defaultPoseSpeed=defaultPoseSpeed, commandFrame=self.commandFrame)
 
  
     #############################
@@ -111,7 +116,7 @@ class RavenArm:
         for stampedPose in stampedPoses:
             duration = (stampedPose.stamp - prevTime).to_sec()
 
-            pose = tfx.pose(stampedPose.position, stampedPose.orientation)
+            pose = tfx.pose(stampedPose.pose.position, stampedPose.orientation)
             self.goToGripperPose(pose, startPose=prevPose, block=False, duration=duration)
 
             prevTime = stampedPose.stamp
@@ -120,7 +125,44 @@ class RavenArm:
         if block:
             return self.blockUntilPaused()
         return True
-    
+
+    def executeStampedPoseGripperTrajectory(self, poseGripperPairs, block=False, xoffset=0.0):
+        """
+        davinciState is a list of tuple(tfx poses, gripperOpenAngle)
+        """
+        firstPair = poseGripperPairs[0]
+        self.setGripperPositionDaVinci(firstPair[1])
+        firstPose = firstPair[0]
+        firstPose.position.x += xoffset
+        self.goToGripperPose(firstPose)
+        prevPose = firstPair[0]
+        j = 0
+        while (j < len(poseGripperPairs)):
+            # if j % 20 == 0:
+            #     # print j
+            #     pair = poseGripperPairs[j]
+            #     pose = tfx.pose(pair[0].position, pair[0].orientation)
+            #     pose.position.x += xoffset
+            #     # IPython.embed()
+            #     # duration = (pose.stamp - prevPose.stamp).to_sec()
+            #     self.setGripperPositionDaVinci(pair[1])
+            #     self.goToGripperPose(pose, startPose=prevPose, speed = 0.06)
+            #     prevPose = pose
+            # j += 1
+            pair = poseGripperPairs[j]
+            pose = tfx.pose(pair[0].position, pair[0].orientation)
+            pose.position.x += xoffset
+            # IPython.embed()
+            # duration = (pose.stamp - prevPose.stamp).to_sec()
+            self.setGripperPositionDaVinci(pair[1])
+            self.goToGripperPose(pose, startPose=prevPose, speed = 0.04)
+            prevPose = pose
+            j += 1
+
+        if block:
+            return self.blockUntilPaused()
+        return True
+
     def executeDeltaPoseTrajectory(self, deltaPoses, startPose=None, block=True, speed=None, ignoreOrientation=False):
         """
         Each deltaPose in deltaPoses is with respect to the startPose
@@ -240,7 +282,7 @@ class RavenArm:
         return True
 
     #####################
-    # command methods   #
+    # f methods   #
     #####################
 
     def goToGripperPose(self, endPose, startPose=None, block=True, duration=None, speed=None, ignoreOrientation=False):
@@ -250,6 +292,7 @@ class RavenArm:
         If startPose is not specified, default to current pose according to tf
         (w.r.t. Link0)
         """
+
         if startPose == None:
             startPose = self.getGripperPose()
             if startPose == None:
@@ -258,10 +301,8 @@ class RavenArm:
         startPose = raven_util.convertToFrame(tfx.pose(startPose), self.commandFrame)
         endPose = raven_util.convertToFrame(tfx.pose(endPose), self.commandFrame)
 
-
         if ignoreOrientation:
             endPose.orientation = startPose.orientation
-
         self.ravenController.goToPose(endPose, start=startPose, duration=duration, speed=speed)
 
         if block:
@@ -303,7 +344,6 @@ class RavenArm:
             
     def closeGripper(self,duration=2.5, block=True):
         self.setGripper(0.,duration=duration,block=block)
-
                 
     def openGripper(self,duration=2.5, block=True):
         self.setGripper(1., duration=duration, block=block)
@@ -350,28 +390,6 @@ class RavenArm:
         jointPos is position in radians
         """
         return self.ravenController.getCurrentJoints()
-
-    def executeInterpolatedTrajectory(self, endPose, num_steps = 1):
-        rospy.sleep(1)
-
-        # rospy.loginfo('Press enter to execute Trajectory')
-        # raw_input()
-
-        n_steps = num_steps
-        weight = float(1)/n_steps
-        trajectory = []
-
-        IPython.embed()
-        startPose = self.ravenController.currentPose
-
-        for i in range(n_steps):
-            trajectory.append(startPose.interpolate(endPose, weight * (i + 1)))
-
-        for pose in trajectory:
-            self.goToGripperPose(pose)
-
-        # rospy.loginfo('Press enter to exit')
-        # raw_input()
 
     #################
     # other methods #
@@ -748,14 +766,14 @@ def testMoveStraightLine(arm=raven_constants.Arm.Right):
     raw_input()
 
     startPose = ravenArm.ravenController.currentPose
-    delta = tfx.pose([0.05, 0.00, 0.00])
+    delta = tfx.pose([0.01, 0.00, 0.00])
     endPose = raven_util.endPose(startPose, delta)    
 
     print "Start Pose:"
     print startPose
     print "End Pose:"
     print endPose
-    ravenArm.ravenController.goToPose(endPose)
+    # ravenArm.ravenController.goToPose(endPose)
 
     rospy.loginfo('Press enter to stop')
     raw_input()
@@ -766,130 +784,109 @@ def testMoveStraightLine(arm=raven_constants.Arm.Right):
     raw_input()
 
 
-def testGripperLinearInterpolator(arm=raven_constants.Arm.Right):
+def testGetCurrentArmPose():
+    armLeft = raven_constants.Arm.Left
+    armRight = raven_constants.Arm.Right
     rospy.init_node('raven_commander',anonymous=True)
-    ravenArm = RavenArm(arm)
+    ravenArmLeft = RavenArm(armLeft, False)
+    ravenArmRight = RavenArm(armRight, False)
     rospy.sleep(1)
-    ravenArm.start()
+
+    ravenArmLeft.start()
+    ravenArmRight.start()
 
     rospy.loginfo('Press enter to start')
     raw_input()
 
-    n_steps = 10
-    weight = float(1)/n_steps
-    trajectory = []
-    trajectory1 = []
+    startPoseLeft = ravenArmLeft.ravenController.currentPose
+    startPoseRight = ravenArmRight.ravenController.currentPose
+    print "Start Left Pose:"
+    print repr(startPoseLeft)
+    print "Start Right Pose:"
+    print repr(startPoseRight)
 
-    startPose = ravenArm.ravenController.currentPose
-    # delta = tfx.pose([0.00, -0.05, 0.05])
-    delta = tfx.pose([0.00, 0.00, 0.00])
-    endPose = raven_util.endPose(startPose, delta)
-    # ravenArm.setGripperPositionDaVinci(0.756851)
-    for i in range(n_steps):
-        trajectory.append(startPose.interpolate(endPose, weight * (i + 1)))
-
-    # ravenArm.setGripperPositionDaVinci(0.01)
-    print "Start Pose:", startPose
-    for pose in trajectory:
-        print repr(pose)
-        # ravenArm.goToGripperPose(pose)
-        # rospy.sleep(1)
-    print "End pose:", endPose
-
-    # startPose1 = ravenArm.getGripperPose()
-    # delta1 = tfx.pose([-0.01, -0.01, -0.01])
-    # endPose1 = raven_util.endPose(startPose1, delta1)
-
-    # for i in range(n_steps):
-    #     trajectory1.append(startPose1.interpolate(endPose1, weight * (i + 1)))
-
-    # print "Start Pose:", startPose1
-    # for pose in trajectory1:
-    #     print pose
-    #     ravenArm.goToGripperPose(pose)
-    #     # rospy.sleep(1)
-    # print "End pose:", endPose1
-
-    ravenArm.ravenController.stop()
+    ravenArmLeft.ravenController.stop()
+    ravenArmRight.ravenController.stop()
 
     rospy.loginfo('Press enter to exit')
     raw_input()
 
-def testGripperPoseExecuteEndPose(arm=raven_constants.Arm.Right):
-    endPose = tfx.pose((0.10111792174636791, 0.018041843424473982, -0.09097057179035087),(-0.7725095288330014, 0.5345941554837077, -0.2807504756969483, 0.19651281683598326))
+def testLeftArm(arm=raven_constants.Arm.Left):
     rospy.init_node('raven_commander',anonymous=True)
-    ravenArm = RavenArm(arm)
+    ravenArm = RavenArm(arm, False)
     rospy.sleep(1)
+
     ravenArm.start()
 
-    rospy.loginfo('Press enter to go to workspace')
+    startPose = ravenArm.getGripperPose()
+    newPose = tfx.pose(startPose, copy = True)
+    newPose.position.x -= 0.01
+    newPose.position.y += 0.01
+    print "Start Pose:"
+    print repr(startPose)
+    print "New Pose:"
+    print repr(newPose)
+
+    rospy.loginfo('Press enter to execute')
     raw_input()
 
-    # ravenArm.setGripperPositionDaVinci(0.768574)
-    ravenArm.executeInterpolatedTrajectory(endPose)
+    ravenArm.goToGripperPose(newPose)
+    rospy.sleep(1)
+    ravenArm.goToGripperPose(startPose)
+    rospy.sleep(1)
+    ravenArm.goToGripperPose(newPose)
+    rospy.sleep(1)
+    ravenArm.goToGripperPose(startPose)
+    rospy.sleep(1)
+
+    print "Start Pose:"
+    print repr(startPose)
+    print "New Pose:"
+    print repr(newPose)
 
     ravenArm.ravenController.stop()
 
-def testGripperSetOpenAngle(arm=raven_constants.Arm.Right):
+def testRightArmSpeed(arm=raven_constants.Arm.Right, testSpeed = 0.02):
     rospy.init_node('raven_commander',anonymous=True)
-    ravenArm = RavenArm(arm)
-    rospy.sleep(1)
-    ravenArm.start()
-
-    rospy.loginfo('Press enter to start')
-    raw_input()
-
-    # ravenArm.executeInterpolatedTrajectory(endPose, 10)
-
-    ravenArm.ravenController.stop()
-
-    rospy.loginfo('Press enter to exit')
-    raw_input()
-
-def testSimulation(arm=raven_constants.Arm.Left):
-    rospy.init_node('raven_commander',anonymous=True)
-    ravenArm = RavenArm(arm, True)
+    ravenArm = RavenArm(arm, False)
     rospy.sleep(1)
 
     ravenArm.start()
-
-    rospy.loginfo('Press enter to start')
-    raw_input()
 
     startPose = ravenArm.ravenController.currentPose
-    delta = tfx.pose([0.01, 0.01, 0.01])
-    delta.frame = ""
-    endPose = raven_util.endPose(startPose, delta)    
-
     print "Start Pose:"
     print startPose
     print "End Pose:"
     print endPose
-    ravenArm.ravenController.goToPose(endPose)
+
+    rospy.loginfo('Press enter to Execute pose')
+    raw_input()
+
+    ravenArm.goToGripperPose(endPose, testSpeed)
 
     rospy.loginfo('Press enter to stop')
     raw_input()
 
     ravenArm.ravenController.stop()
-
-    rospy.loginfo('Press enter to exit')
-    raw_input()
-
 
 if __name__ == '__main__':
-    #testOpenCloseGripper(close=True)
-    #testMoveToHome()
-    #testGoToJoints()
-    #testExecuteTrajopt()
-    #testGoToPose()
-    #testTrajopt()
-    #testExecuteJointTrajectory()
-    #testOpenraveJoints()
-    #testExecuteJointTrajectoryBSP()
+    # testOpenCloseGripper(close=True)
+    # testMoveToHome()
+    # testGoToJoints()
+    # testExecuteTrajopt()
+    # testGoToPose()
+    # testTrajopt()
+    # testExecuteJointTrajectory()
+    # testOpenraveJoints()
+    # testExecuteJointTrajectoryBSP()
     # testGripperMove()
-    testMoveStraightLine()
-    # testGripperLinearInterpolator()
+    # testMoveStraightLine()
     # testGripperPoseExecuteEndPose()
+    # testExecuteEndPoseBothArms()
     # testGripperSetOpenAngle()
     # testSimulation()
-    print 'hello'
+    # testGetCurrentArmPose()
+    # testMoveStraightLine()
+    # testLeftArm()
+    # testRightArmSpeed()
+    pass
